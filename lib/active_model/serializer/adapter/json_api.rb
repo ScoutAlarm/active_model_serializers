@@ -122,6 +122,7 @@ module ActiveModel
             options[:required_fields] = [:id, :type]
             result = serializer.attributes(options)
             result[:id] = result[:id].to_s
+            result[:self] = serializer.self_link if serializer.respond_to?(:self_link)
           end
 
           result
