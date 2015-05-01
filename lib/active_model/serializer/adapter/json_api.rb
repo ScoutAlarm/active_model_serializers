@@ -66,18 +66,28 @@ module ActiveModel
           !ids_per_type[type].try(:include?, id)
         end
 
-        def add_links(resource, name, serializers)
-          resource[:links] ||= {}
-          resource[:links][name] ||= { linkage: [] }
-          resource[:links][name][:linkage] += serializers.map { |serializer| { type: serializer.type, id: serializer.id.to_s } }
+        def add_link_urls(link, assoc_name, serializer)
+          [:self, :related].each do |url_key|
+            url_method = "#{assoc_name}_#{url_key}_link"
+            link[url_key] = serializer.send(url_method) if serializer.respond_to?(url_method)
+          end
         end
 
-        def add_link(resource, name, serializer)
+        def add_links(resource, name, assoc_serializers, serializer)
+          resource[:links] ||= {}
+          resource[:links][name] ||= { linkage: [] }
+          link = resource[:links][name]
+          add_link_urls(link, name, serializer)
+          link[:linkage] += assoc_serializers.map { |serializer| { type: serializer.type, id: serializer.id.to_s } }
+        end
+
+        def add_link(resource, name, assoc_serializer, serializer)
           resource[:links] ||= {}
           resource[:links][name] = { linkage: nil }
-
-          if serializer && serializer.object
-            resource[:links][name][:linkage] = { type: serializer.type, id: serializer.id.to_s }
+          link = resource[:links][name]
+          add_link_urls(link, name, serializer)
+          if assoc_serializer && assoc_serializer.object
+            link[:linkage] = { type: assoc_serializer.type, id: assoc_serializer.id.to_s }
           end
         end
 
@@ -153,9 +163,9 @@ module ActiveModel
             attrs[:links] ||= {}
 
             if association.respond_to?(:each)
-              add_links(attrs, name, association)
+              add_links(attrs, name, association, serializer)
             else
-              add_link(attrs, name, association)
+              add_link(attrs, name, association, serializer)
             end
 
             if options[:add_included]
