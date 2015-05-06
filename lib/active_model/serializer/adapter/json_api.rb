@@ -69,7 +69,9 @@ module ActiveModel
         def add_link_urls(link, assoc_name, serializer)
           [:self, :related].each do |url_key|
             url_method = "#{assoc_name}_#{url_key}_link"
-            link[url_key] = serializer.send(url_method) if serializer.respond_to?(url_method)
+            next unless serializer.respond_to?(url_method)
+            url = serializer.send(url_method)
+            link[url_key] = url if url
           end
         end
 
@@ -104,7 +106,6 @@ module ActiveModel
               attrs = attributes_for_serializer(serializer, @options)
 
               add_resource_links(attrs, serializer, add_included: false)
-              move_self_to_links(attrs)
 
               @hash[:included].push(attrs) unless @hash[:included].include?(attrs)
             end
@@ -115,12 +116,6 @@ module ActiveModel
               add_included(name, association, resource_path) if association
             end if include_nested_assoc? resource_path
           end
-        end
-
-        def move_self_to_links(attrs)
-          return unless attrs[:self]
-          attrs[:links] ||= {}
-          attrs[:links][:self] = attrs.delete(:self)
         end
 
         def attributes_for_serializer(serializer, options)
@@ -138,7 +133,6 @@ module ActiveModel
             options[:required_fields] = [:id, :type]
             result = serializer.attributes(options)
             result[:id] = result[:id].to_s
-            result[:self] = serializer.self_link if serializer.respond_to?(:self_link)
           end
 
           result
@@ -164,10 +158,11 @@ module ActiveModel
 
         def add_resource_links(attrs, serializer, options = {})
           options[:add_included] = options.fetch(:add_included, true)
+          attrs[:links] ||= {}
+          self_link = serializer.self_link if serializer.respond_to?(:self_link)
+          attrs[:links][:self] = self_link if self_link
 
           serializer.each_association do |name, association, opts|
-            attrs[:links] ||= {}
-
             if association.respond_to?(:each)
               add_links(attrs, name, association, serializer)
             else
@@ -180,6 +175,7 @@ module ActiveModel
               end
             end
           end
+          attrs.delete(:links) if attrs[:links].empty?
         end
       end
     end
