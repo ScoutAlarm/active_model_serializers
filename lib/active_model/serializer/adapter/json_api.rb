@@ -104,6 +104,7 @@ module ActiveModel
               attrs = attributes_for_serializer(serializer, @options)
 
               add_resource_links(attrs, serializer, add_included: false)
+              move_self_to_links(attrs)
 
               @hash[:included].push(attrs) unless @hash[:included].include?(attrs)
             end
@@ -116,6 +117,11 @@ module ActiveModel
           end
         end
 
+        def move_self_to_links(attrs)
+          return unless attrs[:self]
+          attrs[:links] ||= {}
+          attrs[:links][:self] = attrs.delete(:self)
+        end
 
         def attributes_for_serializer(serializer, options)
           if serializer.respond_to?(:each)

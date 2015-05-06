@@ -5,10 +5,17 @@ module ActiveModel
     class Adapter
       class JsonApi
         class LinksTest < Minitest::Test
+          class CommentWithSelfLinkSerializer < ActiveModel::Serializer
+            attribute :id
+            def self_link
+              "http://fake.com/comments/#{object.id}"
+            end
+          end
+
           def setup
             @serializer_class = Class.new(ActiveModel::Serializer) do
               attributes :title, :id
-              has_many :comments, serializer: CommentPreviewSerializer
+              has_many :comments, serializer: CommentWithSelfLinkSerializer
             end
             @with_self_link = Proc.new do
               def self_link
@@ -34,12 +41,14 @@ module ActiveModel
           def test_self_link
             @serializer_class.class_eval &@with_self_link
             expected = {
-              id: "1",
-              self: "http://fake.com/posts/1",
-              type: "posts",
-              title: "Hello!!",
-              links: {
-                comments: { linkage: [] }
+              data: {
+                id: "1",
+                self: "http://fake.com/posts/1",
+                type: "posts",
+                title: "Hello!!",
+                links: {
+                  comments: { linkage: [] }
+                }
               }
             }
             assert_post_serialization(expected)
@@ -48,13 +57,15 @@ module ActiveModel
           def test_association_self_link
             @serializer_class.class_eval &@with_assoc_self_link
             expected = {
-              id: "1",
-              type: "posts",
-              title: "Hello!!",
-              links: {
-                comments: {
-                  self: "http://fake.com/posts/1/comments",
-                  linkage: []
+              data: {
+                id: "1",
+                type: "posts",
+                title: "Hello!!",
+                links: {
+                  comments: {
+                    self: "http://fake.com/posts/1/comments",
+                    linkage: []
+                  }
                 }
               }
             }
@@ -64,15 +75,43 @@ module ActiveModel
           def test_association_related_link
             @serializer_class.class_eval &@with_assoc_related_link
             expected = {
-              id: "1",
-              type: "posts",
-              title: "Hello!!",
-              links: {
-                comments: {
-                  related: "http://fake.com/posts/1/rel/comments",
-                  linkage: []
+              data: {
+                id: "1",
+                type: "posts",
+                title: "Hello!!",
+                links: {
+                  comments: {
+                    related: "http://fake.com/posts/1/rel/comments",
+                    linkage: []
+                  }
                 }
               }
+            }
+            assert_post_serialization(expected)
+          end
+
+          def test_self_link_in_included
+            @post.comments = [Comment.new(id: 5)]
+            expected = {
+              data: {
+                id: "1",
+                type: "posts",
+                title: "Hello!!",
+                links: {
+                  comments: {
+                    linkage: [{ id: "5", type: "comments" }]
+                  }
+                }
+              },
+              included: [
+                {
+                  id: "5",
+                  type: "comments",
+                  links: {
+                    self: "http://fake.com/comments/5",
+                  }
+                }
+              ]
             }
             assert_post_serialization(expected)
           end
@@ -83,17 +122,28 @@ module ActiveModel
             end
             @post.comments = [Comment.new(id: 5)]
             expected = {
-              id: "1",
-              self: "http://fake.com/posts/1",
-              type: "posts",
-              title: "Hello!!",
-              links: {
-                comments: {
-                  self: "http://fake.com/posts/1/comments",
-                  related: "http://fake.com/posts/1/rel/comments",
-                  linkage: [{ id: "5", type: "comments" }]
+              data: {
+                id: "1",
+                self: "http://fake.com/posts/1",
+                type: "posts",
+                title: "Hello!!",
+                links: {
+                  comments: {
+                    self: "http://fake.com/posts/1/comments",
+                    related: "http://fake.com/posts/1/rel/comments",
+                    linkage: [{ id: "5", type: "comments" }]
+                  }
                 }
-              }
+              },
+              included: [
+                {
+                  id: "5",
+                  type: "comments",
+                  links: {
+                    self: "http://fake.com/comments/5",
+                  }
+                }
+              ]
             }
             assert_post_serialization(expected)
           end
@@ -101,8 +151,8 @@ module ActiveModel
           private
           def assert_post_serialization(expected)
             serializer = @serializer_class.new(@post)
-            adapter = ActiveModel::Serializer::Adapter::JsonApi.new(serializer)
-            assert_equal(expected, adapter.serializable_hash[:data])
+            adapter = ActiveModel::Serializer::Adapter::JsonApi.new(serializer, include: "comments")
+            assert_equal(expected, adapter.serializable_hash)
           end
         end
       end
